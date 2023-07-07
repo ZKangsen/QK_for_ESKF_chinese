@@ -1,0 +1,285 @@
+\documentclass[10pt, a4paper]{article}
+\usepackage{indentfirst}
+\usepackage{ctex}
+\usepackage{hyperref}
+\usepackage{amsmath}
+\usepackage{mathrsfs}
+\usepackage{amssymb}
+\usepackage{setspace}
+
+\hypersetup{
+  colorlinks=true,
+  allcolors=blue,
+  pdfstartview=Fit,
+  breaklinks=true
+}
+\begin{document}
+  \title{基于四元数动力学的误差状态卡尔曼滤波器}
+  \author{张康宁}
+  \date{\today}
+  \maketitle
+  \thispagestyle{empty}
+  \newpage
+
+  \setcounter{tocdepth}{3}
+  \tableofcontents
+  \listoffigures
+  \listoftables
+  \thispagestyle{empty}
+  \newpage
+
+  \section{四元数定义和性质}
+  \pagenumbering{arabic}
+
+  \subsection{四元数定义}
+  \setlength{\parindent}{2 em}
+  Cayley-Dickson结构给出了一个比较有意思的四元数描述：如果我们有两个复数：$A = a + bi$和$C = c + di$，
+  那么构造$Q = A + Cj$并定义$k \triangleq ij$就产生了四元数空间$\mathbb{H}$中的一个数字，
+  \begin{equation} \label{eq-1}
+    Q = a + bi + cj + dk \in \mathbb{H},
+  \end{equation}
+  这里的$\{a,b,c,d\} \in \mathbb{B}$，$\{i, j, k\}$是三个虚单位数，定义如下：
+  \begin{subequations} \label{eq-2}
+    \begin{equation}
+      i^2 = j^2 = k^2 = ijk = -1
+    \end{equation}
+  从上式可得：
+  \begin{equation}
+    ij = -ji = k, jk = -kj = i, ki = -ik = j.
+  \end{equation}
+  \end{subequations}
+  从式(1)就能看出，我们可以在四元数定义中嵌入复数，同样适用于实数和虚数。
+  在这种意义下，实数、虚数和复数都属于四元数，即:
+  \begin{equation} \label{eq-3}
+    Q = a \in \mathbb{R} \subset \mathbb{H}, \quad
+    Q = bi \in \mathbb{I} \subset \mathbb{H}, \quad
+    Q = a + bi \in \mathbb{Z} \subset \mathbb{H}
+  \end{equation}
+  同样，为了完整起见，我们可以定义$\mathbb{H}$的三维虚子空间中的数。
+  我们把它称为纯虚四元数，可以使用$\mathbb{H}_{p}=Im(\mathbb{H})$表示纯四元数空间，
+  \begin{equation} \label{eq-4}
+    Q = bi + cj + dk \in \mathbb{H}_{p} \subset \mathbb{H}.
+  \end{equation}
+  \par
+  值得注意的是，单位长度的常规复数$\mathbf{z}=e^{i\theta}$可以编码二维平面的旋转
+  （利用复数乘法：$\mathbf{x}^{'}=\mathbf{z} \cdot \mathbf{x}$），“扩展复数”或单位长度四元数
+  $\mathbf{q} = e^{(u_xi + u_yj + u_zk)\theta/2}$编码了三维空间的旋转
+  （使用双四元数乘法：$\mathbf{x}^{'}=\mathbf{q} \otimes \mathbf{x} \otimes \mathbf{q}^{*}$，我们后面会介绍）。
+  \paragraph{CAUTION:}
+  并不是所有四元数定义都相同。一些作者将乘法写成$ib$而不是$bi$，所以就得到$k = ji = -ij$和$ijk=1$，这就变成了满足左手定则的四元数。
+  并且有很多作者将实部放在最后，得到$Q=ia+jb+kc+d$。这些选择并没有根本的影响，只是在细节上造成了整个表达方式的不同。进一步的解释和区分请参考第三节。
+  \paragraph{CAUTION:}
+  还有一些其他定义会在公式细节上产生一些不同。主要集中在我们给予旋转操作的解释或意义，比如对向量进行旋转或对参考系进行旋转本质上是相反运算。
+  进一步的解释和区分请参考第三节。
+  \paragraph{NOTE:}
+  在以上不同的四元数定义中，该文档主要针对$Hamilton$定义，它的显著特点就是公式\eqref{eq-2}的定义。正确而有效的消除歧义需要开发大量的资料，
+  所以歧义消除放在前面提到的第三节。
+
+  \subsubsection{四元数表示方法}
+  实部+虚部的表示法$\{1, i, j, k\}$有时使用起来并不方便。在使用公式\eqref{eq-2}的定义时，四元数可以表示为标量+向量的和，
+  \begin{equation} \label{eq-5}
+    Q = q_w + q_xi + q_yj + q_zk \quad \Leftrightarrow \quad Q = q_w + \mathbf{q}_v,
+  \end{equation}
+  这里的$q_w$指的是实数或常量部分，$\mathbf{q}_v=q_xi + q_yj + q_zk = (q_x, q_y, q_z)$指的是虚数或向量部分
+  \footnote{我们选择$(w, x, y, z)$作为下标是因为我们对四元数在三维笛卡尔空间的几何属性感兴趣。其他经常使用的下标
+  表示有$(0, 1, 2, 3)$或$(1, i, j, k)$，也许更适合于数学解释。}。
+  四元数还可以定义为一个<常量-向量>的有序对：
+  \begin{equation} \label{eq-6}
+    Q = \langle q_w, \mathbf{q}_v \rangle.
+  \end{equation}
+  我们一般将四元数$Q$表示成一个$4$维向量$\mathbf{q}$，
+  \begin{equation} \label{eq-7}
+    \mathbf{q} \triangleq \begin{bmatrix} q_w \\ \mathbf{q}_v \end{bmatrix} =
+    \begin{bmatrix} q_w \\ q_x \\ q_y \\ q_z \end{bmatrix}，
+  \end{equation}
+  向量形式便于我们利用矩阵代数来进行四元数有关的运算。在某些情况下，我们可以混用$=$运算符。
+  典型的例子是实四元数和纯虚四元数，
+  \begin{equation} \label{eq-8}
+    general: q = q_w + \mathbf{q}_v = \begin{bmatrix} q_w \\ \mathbf{q}_v \end{bmatrix} \in \mathbb{H}, \;
+    real: q_w = \begin{bmatrix} q_w \\ \mathbf{0}_v \end{bmatrix} \in \mathbb{R}, \;
+    pure: \mathbf{q}_v = \begin{bmatrix} 0 \\ \mathbf{q}_v \end{bmatrix} \in \mathbb{H}_p.
+  \end{equation}
+
+  \subsection{四元数主要性质}
+  \subsubsection{加法}
+  直接相加即可：
+  \begin{equation} \label{eq-9}
+    \mathbf{p} \pm \mathbf{q} =
+    \begin{bmatrix} p_w \\ \mathbf{p}_v \end{bmatrix} \pm \begin{bmatrix} q_w \\ \mathbf{q}_v \end{bmatrix} =
+    \begin{bmatrix} p_w \pm q_w \\ \mathbf{p}_v \pm \mathbf{q}_v \end{bmatrix}.
+  \end{equation}
+  从结构上看，加法是满足交换律和结合律的，即
+  \begin{equation} \label{eq-10} \mathbf{p} + \mathbf{q} = \mathbf{q} + \mathbf{p} \end{equation}
+  \begin{equation} \label{eq-11} \mathbf{p} + (\mathbf{q} + \mathbf{r}) = (\mathbf{p} + \mathbf{q}) + \mathbf{r} \end{equation}
+
+  \subsubsection{乘法}
+  四元数乘法用符号$\otimes$表示，乘法运算需要用到四元数公式\eqref{eq-1}和公式\eqref{eq-2}。写成向量形式如下：\\
+  \begin{equation} \label{eq-12}
+    \mathbf{p} \otimes \mathbf{q} =
+    \begin{bmatrix}
+      p_w q_w - p_x q_x - p_y q_y - p_z q_z \\
+      p_w q_x + p_x q_w + p_y q_z - p_z q_y \\
+      p_w q_y - p_x q_z + p_y q_w + p_z q_x \\
+      p_w q_z + p_x q_y - p_y q_x + p_z q_w
+    \end{bmatrix} .
+  \end{equation}
+  上式也可以用标量和向量部分来表示，
+  \begin{equation} \label{eq-13}
+    \mathbf{p} \otimes \mathbf{q} =
+    \begin{bmatrix}
+      p_w q_w - \mathbf{p}^T_v \mathbf{q}_v \\
+      p_w \mathbf{q}_v + q_w \mathbf{p}_v + \mathbf{p}_v \times \mathbf{q}_v
+    \end{bmatrix} ,
+  \end{equation}
+  上式中叉乘的出现意味着四元数乘法一般是不可交换的（即不满足交换律），
+  \begin{equation} \label{eq-14}
+    \mathbf{p} \otimes \mathbf{q} \neq \mathbf{q} \otimes \mathbf{p} .
+  \end{equation}
+  上面这种一般非交换性的例外情况是$\mathbf{p}_v \times \mathbf{q}_v = 0$，当其中一个四元数是实四元数（$\mathbf{p} = p_w$或
+  $\mathbf{q} = q_w$），或者两个四元数的向量部分是平行的（$\mathbf{p}_v || \mathbf{q}_v$），就会出现这种例外情况，即四元数乘法可交换.\\
+  四元数乘法是满足结合律的， \\
+  \begin{equation} \label{eq-15}
+    (\mathbf{p} \otimes \mathbf{q}) \otimes \mathbf{r} = \mathbf{p} \otimes (\mathbf{q} \otimes \mathbf{r})，
+  \end{equation}
+  以及分配率，
+  \begin{equation} \label{eq-16}
+    \mathbf{p} \otimes (\mathbf{q} + \mathbf{r}) = \mathbf{p} \otimes \mathbf{q} + \mathbf{p} \otimes \mathbf{r}
+    \quad and \quad
+    (\mathbf{p} + \mathbf{q}) \otimes \mathbf{r} = \mathbf{p} \otimes \mathbf{r} + \mathbf{q} \otimes \mathbf{r}
+  \end{equation}
+  两个四元数的乘法是双线性的，并且可以表示为两个等价的矩阵乘法，如下：
+  \begin{equation} \label{eq-17}
+    \mathbf{q}_1 \otimes \mathbf{q}_2 = [\mathbf{q}_1]_L \mathbf{q}_2 \quad and \quad
+    \mathbf{q}_1 \otimes \mathbf{q}_2 = [\mathbf{q}_2]_R \mathbf{q}_1 ,
+  \end{equation}
+  这里的$[\mathbf{q}]_L$和$[\mathbf{q}]_R$分别是左和右四元数乘法矩阵，它们是从公式\eqref{eq-12}和\eqref{eq-17}简单推导而来，
+  \begin{equation} \label{eq-18}
+    [\mathbf{q}]_L =
+    \begin{bmatrix}
+      q_w & -q_x & -q_y & -q_z \\
+      q_x &  q_w & -q_z &  q_y \\
+      q_y &  q_z &  q_w & -q_x \\
+      q_z & -q_y &  q_x &  q_w
+    \end{bmatrix} , \quad
+    [\mathbf{q}]_R =
+    \begin{bmatrix}
+      q_w & -q_x & -q_y & -q_z \\
+      q_x &  q_w &  q_z & -q_y \\
+      q_y & -q_z &  q_w &  q_x \\
+      q_z &  q_y & -q_x &  q_w
+    \end{bmatrix} ,
+  \end{equation}
+  或者更简洁一些，从公式\eqref{eq-13}和\eqref{eq-17}推导可得，
+  \begin{equation} \label{eq-19}
+    [\mathbf{q}]_L = q_w \mathbf{I} +
+    \begin{bmatrix}
+      0 & -\mathbb{q}_v^T \\
+      \mathbf{q}_v & [\mathbf{q}_v]_\times
+    \end{bmatrix}, \quad
+    [\mathbf{q}]_R = q_w \mathbf{I} +
+    \begin{bmatrix}
+      0 & -\mathbf{q}_v^T \\
+      \mathbf{q}_v & -[\mathbf{q}_v]_\times
+    \end{bmatrix} .
+  \end{equation}
+  这里的反对称运算符\footnote{反对称运算符在文献中有很多种不同的名称和符号，比如叉乘符号$\times$或'hat'符号$\wedge$，所以下面的表示方法是等价的, \\
+  \begin{equation*}
+    [\mathbf{a}]_\times \equiv [\mathbf{a}_\times] \equiv \mathbf{a} \times \equiv \mathbf{a}_\times \equiv
+    [\mathbf{a}] \equiv \hat{\mathbf{a}} \equiv \mathbf{a}^{\wedge}.
+  \end{equation*}. }
+  $[\bullet]_\times$对应生成叉乘矩阵,
+  \begin{equation} \label{eq-20}
+    \mathbf{a}_\times \triangleq
+    \begin{bmatrix}
+      0 & -a_z & a_y \\
+      a_z & 0 & -a_x \\
+      -a_y & a_x & 0
+    \end{bmatrix} ,
+  \end{equation}
+  上式称为反对称矩阵，$[\mathbf{a}]_\times^T = -[\mathbf{a}]_\times$，等价于叉乘，即，
+  \begin{equation} \label{eq-21}
+    [\mathbf{a}]_\times\mathbf{b} = \mathbf{a} \times \mathbf{b}, \quad \forall \mathbf{a}, \mathbf{b} \in \mathbb{R}^3.
+  \end{equation}
+  然后根据
+  \begin{equation} \label{eq-22}
+    (\mathbf{q} \otimes \mathbf{x}) \otimes \mathbf{p} = [\mathbf{p}]_R [\mathbf{q}]_L \mathbf{x} \quad and \quad
+    \mathbf{q} \otimes (\mathbf{x} \otimes \mathbf{p}) = [\mathbf{q}]_L [\mathbf{p}]_R \mathbf{x}
+  \end{equation}
+  我们得到如下关系：
+  \begin{equation} \label{eq-23}
+    [\mathbf{p}]_R [\mathbf{q}]_L = [\mathbf{q}]_L [\mathbf{p}]_R
+  \end{equation}
+  这就是左、右四元数乘法矩阵的交换性。这些矩阵的更多特性将在$2.8$节介绍。
+  四元数的乘积运算符$\otimes$组成了非交换群。该群的单位元素$\mathbf{q}_1 = 1$，和逆$\mathbf{q}^{-1}$接下来介绍。
+
+  \subsubsection{单位量}
+  四元数单位量$\mathbf{q}_1$的乘法性质：$\mathbf{q}_1 \otimes \mathbf{q} = \mathbf{q} \otimes \mathbf{q}_1 = \mathbf{q}$。
+  它对应于以四元数表示的实数单位‘1’，
+  \begin{equation*}
+    \mathbf{q}_1 = 1 =
+    \begin{bmatrix}
+      1 \\
+      \mathbf{0}_v
+    \end{bmatrix} .
+  \end{equation*}
+
+  \subsubsection{共轭}
+  四元数共轭定义为：
+  \begin{equation} \label{eq-24}
+    \mathbf{q}^{*} \triangleq q_w - \mathbf{q}_v =
+    \begin{bmatrix}
+      q_w \\ -\mathbf{q}_v
+    \end{bmatrix}
+  \end{equation}
+  四元数共轭具有以下性质：
+  \begin{equation} \label{eq-25}
+    \mathbf{q} \otimes \mathbf{q}^{*} = \mathbf{q}^{*} \otimes \mathbf{q} = q_w^2 + q_x^2 + q_y^2 + q_z^2 =
+    \begin{bmatrix}
+      q_w^2 + q_x^2 + q_y^2 + q_z^2 \\ \mathbf{0}_v
+    \end{bmatrix}.
+  \end{equation}
+  以及
+  \begin{equation} \label{eq-26}
+    (\mathbf{p} \otimes \mathbf{q})^{*} = \mathbf{q}^{*} \otimes \mathbf{p}^{*}
+  \end{equation}.
+
+  \subsubsection{模}
+  四元数的模定义为：
+  \begin{equation} \label{eq-27}
+    || \mathbf{q} || \triangleq \sqrt{\mathbf{q} \otimes \mathbf{q}^*} =
+    \sqrt{\mathbf{q}^* \otimes \mathbf{q}} = \sqrt{q_w^2 + q_x^2 + q_y^2 + q_z^2} \in \mathbb{R} .
+  \end{equation}
+  模具有以下性质：
+  \begin{equation} \label{eq-28}
+    || \mathbf{p} \otimes \mathbf{q} || = || \mathbf{q} \otimes \mathbf{p} || = ||\mathbf{p}|| ||\mathbf{q}||.
+  \end{equation}
+
+  \subsubsection{逆}
+  四元数的逆$\mathbf{q}_{-1}$也就是四元数乘以它的逆得到单位量，即：
+  \begin{equation} \label{eq-29}
+    \mathbf{q} \otimes \mathbf{q}_{-1} = \mathbf{q}_{-1} \otimes \mathbf{q} = \mathbf{q}_1 .
+  \end{equation}
+  逆的计算：
+  \begin{equation} \label{eq-30}
+    \mathbf{q}_{-1} = \mathbf{q}_{*} / ||\mathbf{q}||^2 .
+  \end{equation}
+
+  \subsubsection{单位/归一化四元数}
+  对单位四元数$||\mathbf{q}|| = 1$来说，四元数的逆等于它的共轭：
+  \begin{equation} \label{eq-31}
+    \mathbf{q}_{-1} = \mathbf{q}_{*} .
+  \end{equation}
+  当把单位四元数解释为方向表示或旋转运算符时，这个属性意味着逆旋转可以由共轭四元数来完成。单位四元数也可以写成如下形式：
+  \begin{equation} \label{eq-32}
+    \mathbf{q} =
+    \begin{bmatrix}
+      \cos\theta \\
+      \mathbf{u}\sin\theta
+    \end{bmatrix} ,
+  \end{equation}
+  这里的$\mathbf{u} = u_xi + u_yj + u_zk$是单位向量，$\theta$是常量。\\
+  根据式\eqref{eq-28}，单位四元数及对应的乘法操作$\otimes$组成了非交换群，其逆正好与共轭相同。
+
+  \subsection{四元数其他性质}
+  \subsubsection{四元数换向器}
+\end{document}
